@@ -35,29 +35,38 @@ namespace NETDeob.Core.Deobfuscators.Generic
 
         public IEnumerable<object> FetchParameters()
         {
-            var @params = FetchParametersNormalWay();
-            if (@params.Count() == Target.ParameterCount)
-                yield return @params;
+            var @params = FetchParametersNormalWay().ToArray();
+            //if (@params.Length == Target.ParameterCount)
+             //   return @params;
 
             // lets try another method
-            var tracer = new StackTracer(Source.Body);
-
-            tracer.TraceUntil(BadInstructions[0]);
-            var reverseStack = new Stack<StackTracer.StackEntry>();
-
-            for (var i = 0 ; i < Target.ParameterCount ; i++)
-                reverseStack.Push(tracer.Stack.Pop());
-            for (var i = 0; i < Target.ParameterCount; i++)
-                yield return reverseStack.Pop().Value;
+            return FetchParametersWithStackTracer();
         }
 
         private IEnumerable<object> FetchParametersNormalWay()
         {
+            
             foreach (var instr in BadInstructions)
                 if (instr.IsLdcI4())
                     yield return instr.GetLdcI4();
                 else if (instr.OpCode == OpCodes.Ldstr)
                     yield return instr.Operand as string;
+        }
+
+        private IEnumerable<object> FetchParametersWithStackTracer()
+        {
+            Logger.VSLog("");
+            Logger.VSLog("StackTrace: " + Source.FullName);
+
+            var tracer = new StackTracer(Source.Body);
+            tracer.TraceUntil(BadInstructions[0]);
+
+            // have to reverse the stack to pass parameters correctly
+            var reverseStack = new Stack<StackTracer.StackEntry>();
+            for (var i = 0; i < Target.ParameterCount; i++)
+                reverseStack.Push(tracer.Stack.Pop());
+            for (var i = 0; i < Target.ParameterCount; i++)
+                yield return reverseStack.Pop().Value;
         }
 
         public override string ToString()
@@ -80,7 +89,7 @@ namespace NETDeob.Core.Deobfuscators.Generic
         {
             var decMethods = YieldDecryptionMethods().ToList();
 
-            if(decMethods.Count == 0)
+            if (decMethods.Count == 0)
             {
                 ThrowPhaseError("Could not locate any decryptor method!", 1, false);
                 return false;
@@ -98,13 +107,13 @@ namespace NETDeob.Core.Deobfuscators.Generic
             var decMethods = PhaseParam as List<Decryptor>;
             var calls = YieldDecryptionCalls(decMethods).ToList();
 
-            foreach(var call in calls)
+            foreach (var call in calls)
                 Logger.VLog(string.Format("Call from {0} -> {1}", call.Item2.Name,
                                           (call.Item1.Operand as MethodReference).Resolve().Name));
 
             Logger.VSLog(string.Format("Found {0} references to decryption methods...", calls.Count));
 
-            PhaseParam = new object[] {decMethods, calls};
+            PhaseParam = new object[] { decMethods, calls };
             return true;
         }
 
@@ -114,7 +123,7 @@ namespace NETDeob.Core.Deobfuscators.Generic
             var decMethods = PhaseParam[0] as List<Decryptor>;
             var calls = PhaseParam[1] as List<Tuple<Instruction, MethodDefinition>>;
 
-            var ctxList = ConstructEntries(new object[] {decMethods, calls}).ToList();
+            var ctxList = ConstructEntries(new object[] { decMethods, calls }).ToList();
             Logger.VSLog(string.Format("Constructed {0} decryption entries", ctxList.Count));
 
             PhaseParam = ctxList;
@@ -198,7 +207,8 @@ namespace NETDeob.Core.Deobfuscators.Generic
         public string DynamicDecrypt(int token, GenericDecryptionContext ctx)
         {
             var method = ResolveReflectionMethod(token);
-            return (string) method.Invoke(null, ctx.FetchParameters().ToArray());
+            var parameters = ctx.FetchParameters().ToArray();
+            return (string)method.Invoke(null, parameters);
         }
         public MethodBase ResolveReflectionMethod(int token)
         {
