@@ -36,6 +36,8 @@ namespace NETDeob.Core.Deobfuscators.Generic
         public IEnumerable<object> FetchParameters()
         {
             var @params = FetchParametersNormalWay();
+            if (@params.Count() == Target.ParameterCount)
+                yield return @params;
 
             // lets try another method
             var tracer = new StackTracer(Source.Body);
